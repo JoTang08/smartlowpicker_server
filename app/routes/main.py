@@ -15,6 +15,7 @@ from app.routes.stocks_analyse import (
     get_low_price_stocks_api,
     list_low_price_stock_files_api,
     is_fund_inflow_continuous_api,
+    fetch_and_update_margin_by_code_api,
 )
 
 main = Blueprint("main", __name__)
@@ -82,3 +83,8 @@ def list_low_price_stock_files():
 @main.route("/is_fund_inflow_continuous", methods=["POST"])
 def is_fund_inflow_continuous():
     return is_fund_inflow_continuous_api()
+
+
+@main.route("/fetch_and_update_margin_by_code", methods=["POST"])
+def fetch_and_update_margin_by_code():
+    return fetch_and_update_margin_by_code_api()
