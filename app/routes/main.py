@@ -14,8 +14,8 @@ from app.routes.stocks_analyse import (
     get_history_cache_count_api,
     get_low_price_stocks_api,
     list_low_price_stock_files_api,
-    is_fund_inflow_continuous_api,
     fetch_and_update_margin_by_code_api,
+    get_analyze_batch_data_api
 )
 
 main = Blueprint("main", __name__)
@@ -74,15 +74,13 @@ def get_low_price_stocks():
 def analyze_batch():
     return analyze_batch_api()
 
+@main.route("/analyze_batch_data", methods=["POST"])
+def analyze_batch_data():
+    return get_analyze_batch_data_api()
 
 @main.route("/list_low_price_stock_files", methods=["GET"])
 def list_low_price_stock_files():
     return list_low_price_stock_files_api()
-
-
-@main.route("/is_fund_inflow_continuous", methods=["POST"])
-def is_fund_inflow_continuous():
-    return is_fund_inflow_continuous_api()
 
 
 @main.route("/fetch_and_update_margin_by_code", methods=["POST"])

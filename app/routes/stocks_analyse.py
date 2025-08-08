@@ -7,6 +7,7 @@ import numpy as np
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 HISTORY_CACHE_DIR = os.path.join(BASE_DIR, "history_cache")
+STOCK_INFO_DIR = os.path.join(BASE_DIR, "stocks_info")
 LIST_CSV_PATH = os.path.join(BASE_DIR, "stocks_info", "list.csv")
 stock_list_df = pd.read_csv(LIST_CSV_PATH, dtype=str)
 code_name_map = dict(zip(stock_list_df["code"], stock_list_df["name"]))
@@ -44,6 +45,7 @@ def fetch_and_update_margin_data_sse(code: str, days=30):
     dfs = []
     for date_str in dates:
         try:
+            print(f"正在获取上交所{date_str}的融资融券数据中。。。")
             df = ak.stock_margin_detail_sse(date=date_str)
             stock_df = df[df["标的证券代码"] == code]
             if not stock_df.empty:
@@ -60,16 +62,10 @@ def fetch_and_update_margin_data_sse(code: str, days=30):
 
     new_data = pd.concat(dfs, ignore_index=True)
 
-    # 合并旧数据
-    if os.path.exists(file_path):
-        old_data = pd.read_csv(file_path, dtype=str)
-        combined = pd.concat([old_data, new_data], ignore_index=True)
-        combined.drop_duplicates(subset=["标的证券代码", "日期"], inplace=True)
-    else:
-        combined = new_data
+    # 直接覆盖写入，不保留历史数据
+    new_data.to_csv(file_path, index=False, encoding="utf-8-sig")
+    print(f"[SSE] {code} 数据已保存至 {file_path}（已覆盖旧数据）")
 
-    combined.to_csv(file_path, index=False, encoding="utf-8-sig")
-    print(f"[SSE] {code} 数据已保存至 {file_path}")
     return new_data.to_dict(orient="records")
 
 
@@ -84,6 +80,7 @@ def fetch_and_update_margin_data_szse(code: str, days=30):
     dfs = []
     for date_str in dates:
         try:
+            print(f"正在获取深交所{date_str}的融资融券数据中。。。")
             df = ak.stock_margin_detail_szse(date=date_str)
             stock_df = df[df["证券代码"] == code]
             if not stock_df.empty:
@@ -100,15 +97,10 @@ def fetch_and_update_margin_data_szse(code: str, days=30):
 
     new_data = pd.concat(dfs, ignore_index=True)
 
-    if os.path.exists(file_path):
-        old_data = pd.read_csv(file_path, dtype=str)
-        combined = pd.concat([old_data, new_data], ignore_index=True)
-        combined.drop_duplicates(subset=["证券代码", "日期"], inplace=True)
-    else:
-        combined = new_data
+    # 覆盖旧文件，直接写入
+    new_data.to_csv(file_path, index=False, encoding="utf-8-sig")
+    print(f"[SZSE] {code} 数据已保存至 {file_path}（已覆盖旧数据）")
 
-    combined.to_csv(file_path, index=False, encoding="utf-8-sig")
-    print(f"[SZSE] {code} 数据已保存至 {file_path}")
     return new_data.to_dict(orient="records")
 
 
@@ -209,120 +201,6 @@ def fetch_and_update_margin_by_code_api():
         return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
 
 
-def infer_market_from_code(code: str) -> str:
-    if code.startswith("6"):
-        return "sh"
-    elif code.startswith("0") or code.startswith("3"):
-        return "sz"
-    elif code.startswith("8") or code.startswith("4"):
-        return "bj"
-    else:
-        raise ValueError("无法识别市场类型")
-
-
-def is_fund_inflow_continuous(code: str) -> dict:
-    try:
-        # 获取主力资金数据
-        market = infer_market_from_code(code)
-        fund_df = ak.stock_individual_fund_flow(stock=code, market=market)
-        fund_df["日期"] = pd.to_datetime(fund_df["日期"])
-        fund_df = fund_df.sort_values("日期", ascending=True)
-
-        # 自动识别“主力净流入额”字段名
-        flow_col = next(
-            (col for col in fund_df.columns if "主力" in col and "净流入" in col), None
-        )
-        if not flow_col:
-            return {
-                "股票代码": code,
-                "错误": "主力净流入字段缺失",
-                "是否资金持续流入": "未知",
-            }
-
-        # 转换并清理非法值
-        fund_df[flow_col] = pd.to_numeric(fund_df[flow_col], errors="coerce")
-        fund_df = fund_df.dropna(subset=[flow_col])
-        recent_fund = fund_df.tail(3)
-
-        if len(recent_fund) < 3:
-            return {
-                "股票代码": code,
-                "错误": "主力资金数据不足3日",
-                "是否资金持续流入": "未知",
-            }
-
-        net_inflows = recent_fund[flow_col].tolist()
-        fund_positive_days = sum(1 for val in net_inflows if val > 0)
-        fund_total_inflow = sum(net_inflows)
-
-        # 获取融资余额数据（自动判断市场）
-        if market == "sh":
-            margin_df = ak.stock_margin_detail_sse(symbol=code)
-        elif market == "sz":
-            margin_df = ak.stock_margin_detail_szse(symbol=code)
-        else:
-            return {
-                "股票代码": code,
-                "错误": "不支持的交易所（北京）",
-                "是否资金持续流入": "未知",
-            }
-
-        margin_df["日期"] = pd.to_datetime(margin_df["日期"])
-        margin_df = margin_df.sort_values("日期", ascending=True)
-
-        # 自动识别“融资余额”字段
-        margin_col = next((col for col in margin_df.columns if "融资余额" in col), None)
-        if not margin_col:
-            return {
-                "股票代码": code,
-                "错误": "融资余额字段缺失",
-                "是否资金持续流入": "未知",
-            }
-
-        margin_df[margin_col] = pd.to_numeric(margin_df[margin_col], errors="coerce")
-        margin_df = margin_df.dropna(subset=[margin_col])
-        recent_margin = margin_df.tail(3)
-
-        if len(recent_margin) < 2 or recent_margin.iloc[0][margin_col] == 0:
-            margin_pct_change = 0.0
-        else:
-            margin_pct_change = (
-                (recent_margin.iloc[-1][margin_col] - recent_margin.iloc[0][margin_col])
-                / recent_margin.iloc[0][margin_col]
-                * 100
-            )
-
-        is_continuous = (
-            "是" if fund_positive_days == 3 and margin_pct_change > 0 else "否"
-        )
-
-        return {
-            "股票代码": code,
-            "主力连续净流入天数": fund_positive_days,
-            "主力累计净流入": round(fund_total_inflow, 2),
-            "融资余额累计变化": round(margin_pct_change, 2),
-            "是否资金持续流入": is_continuous,
-        }
-
-    except Exception as e:
-        return {"股票代码": code, "错误": str(e), "是否资金持续流入": "未知"}
-
-
-def is_fund_inflow_continuous_api():
-    try:
-        data = request.get_json() or {}
-        code = data.get("code") or request.args.get("code")
-
-        if not code:
-            return jsonify({"code": 1, "message": "缺少参数 code"}), 400
-
-        result = is_fund_inflow_continuous(code)
-        return jsonify({"code": 0, "message": "成功", "data": result})
-
-    except Exception as e:
-        return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
-
-
 def get_history_cache_count_api():
     try:
         files = [f for f in os.listdir(HISTORY_CACHE_DIR) if f.endswith(".csv")]
@@ -399,27 +277,10 @@ def analyze_batch_api():
         save_path = os.path.join(
             BASE_DIR, "stocks_info", f"low_price_stocks_{days}.csv"
         )
-        if os.path.exists(save_path):
-            existing_df = pd.read_csv(save_path, dtype=str)
-        else:
-            existing_df = pd.DataFrame(
-                columns=[
-                    "股票代码",
-                    "股票名称",
-                    "当前价",
-                    "阶段最低",
-                    "阶段最高",
-                    "涨跌幅（%）",
-                ]
-            )
 
         new_df = pd.DataFrame(results)
-
-        # 合并去重，优先保留已有数据
-        combined_df = pd.concat([existing_df, new_df])
-        combined_df.drop_duplicates(subset=["股票代码"], keep="first", inplace=True)
-
-        combined_df.to_csv(save_path, index=False, encoding="utf-8-sig")
+        # 直接覆盖写入，不合并，不去重
+        new_df.to_csv(save_path, index=False, encoding="utf-8-sig")
 
         return jsonify(
             {
@@ -435,6 +296,45 @@ def analyze_batch_api():
 
     except Exception as e:
         return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
+
+
+def get_analyze_batch_data_api():
+    try:
+        # 获取 days 参数，默认值为 90
+        data = request.get_json()
+        days = int(data.get("days", 90))
+        # 构造文件路径
+        filename = f"low_price_stocks_{days}.csv"
+        file_path = os.path.join(STOCK_INFO_DIR, filename)
+
+        # 判断文件是否存在
+        if not os.path.exists(file_path):
+            return (
+                jsonify(
+                    {
+                        "code": 1,
+                        "message": f"不存在 {days} 天的分析数据文件：{filename}",
+                    }
+                ),
+                404,
+            )
+        print(f"正在读取{file_path}文件内容。")
+        # 读取 CSV 文件
+        df = pd.read_csv(file_path, dtype=str)
+        data = df.to_dict(orient="records")
+
+        return jsonify(
+            {
+                "code": 0,
+                "message": f"成功读取 {filename}",
+                "days": days,
+                "count": len(data),
+                "data": data,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"code": -1, "message": f"服务器异常：{str(e)}"}), 500
 
 
 def get_low_price_stocks_api():
@@ -494,6 +394,3 @@ def list_low_price_stock_files_api():
         )
     except Exception as e:
         return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
-
-
-analyze_margin_data_sse("600502")
