@@ -1,0 +1,4 @@
+.venv/
+.vscode
+history_cache
+stocks_info

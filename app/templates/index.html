@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SmartLowPicker - 股票分析服务</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: "Helvetica Neue", "微软雅黑", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f6f9fc;
+        color: #333;
+      }
+
+      header {
+        background-color: #1a73e8;
+        color: white;
+        padding: 40px 20px;
+        text-align: center;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 2.5em;
+      }
+
+      header p {
+        font-size: 1.2em;
+        margin-top: 10px;
+      }
+
+      main {
+        padding: 40px 20px;
+        max-width: 800px;
+        margin: auto;
+      }
+
+      section {
+        margin-bottom: 40px;
+      }
+
+      h2 {
+        color: #1a73e8;
+        border-bottom: 2px solid #ddd;
+        padding-bottom: 5px;
+      }
+
+      footer {
+        background-color: #f0f0f0;
+        text-align: center;
+        padding: 20px;
+        color: #777;
+        font-size: 0.9em;
+        border-top: 1px solid #ddd;
+      }
+
+      code {
+        background-color: #eef;
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>SmartLowPicker 股票分析平台</h1>
+      <p>基于 AKShare 和 Flask 构建的 Python 后台服务</p>
+    </header>
+
+    <main>
+      <section>
+        <h2>项目简介</h2>
+        <p>
+          <strong>SmartLowPicker</strong>
+          是一个用于股票策略分析与选股的后端服务，使用
+          <code>AKShare</code> 获取财经数据，结合
+          <code>Pandas</code> 处理数据，并通过 <code>Flask</code> 提供 Web API
+          接口。
+        </p>
+      </section>
+
+      <section>
+        <h2>功能特性</h2>
+        <ul>
+          <li>✅ 股票行情、财报、估值指标自动获取</li>
+          <li>📊 使用 Pandas 快速处理并筛选数据</li>
+          <li>📈 可视化输出选股结果（支持 Matplotlib）</li>
+          <li>🧠 易扩展、可集成至前端平台或量化系统</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>使用方式</h2>
+        <p>本项目为服务端 API，启动方式如下：</p>
+        <pre><code>python run.py</code></pre>
+        <p>接口如：<code>GET /api/stock/summary</code> 返回选股结果</p>
+      </section>
+    </main>
+
+    <footer>&copy; 2025 SmartLowPicker 项目团队｜构建于 Flask & AKShare</footer>
+  </body>
+</html>
