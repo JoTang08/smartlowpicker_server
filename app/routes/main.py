@@ -14,8 +14,12 @@ from app.routes.stocks_analyse import (
     get_history_cache_count_api,
     get_low_price_stocks_api,
     list_low_price_stock_files_api,
-    fetch_and_update_margin_by_code_api,
-    get_analyze_batch_data_api
+    update_margin_data_api,
+    get_analyze_batch_data_api,
+    add_to_watchlist_api,
+    remove_to_watchlist_api,
+    get_watched_stocks_api,
+    query_margin_data_by_code_api,
 )
 
 main = Blueprint("main", __name__)
@@ -74,15 +78,37 @@ def get_low_price_stocks():
 def analyze_batch():
     return analyze_batch_api()
 
+
 @main.route("/analyze_batch_data", methods=["POST"])
 def analyze_batch_data():
     return get_analyze_batch_data_api()
+
 
 @main.route("/list_low_price_stock_files", methods=["GET"])
 def list_low_price_stock_files():
     return list_low_price_stock_files_api()
 
 
-@main.route("/fetch_and_update_margin_by_code", methods=["POST"])
-def fetch_and_update_margin_by_code():
-    return fetch_and_update_margin_by_code_api()
+@main.route("/update_margin_data", methods=["POST"])
+def update_margin_data():
+    return update_margin_data_api()
+
+
+@main.route("/watchlist/add", methods=["POST"])
+def add_to_watchlist():
+    return add_to_watchlist_api()
+
+
+@main.route("/watchlist/remove", methods=["POST"])
+def remove_to_watchlist():
+    return remove_to_watchlist_api()
+
+
+@main.route("/get_watched_stocks", methods=["GET", "POST"])
+def get_watched_stocks():
+    return get_watched_stocks_api()
+
+
+@main.route("/query_margin_data_by_code", methods=["POST"])
+def query_margin_data_by_code():
+    return query_margin_data_by_code_api()

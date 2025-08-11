@@ -15,93 +15,94 @@ code_name_map = dict(zip(stock_list_df["code"], stock_list_df["name"]))
 MARGIN_FILE_SSE = os.path.join(BASE_DIR, "stocks_info", "margin_sse.csv")
 MARGIN_FILE_SZSE = os.path.join(BASE_DIR, "stocks_info", "margin_szse.csv")
 
+WATCHLIST_FILE = os.path.join(BASE_DIR, "stocks_info", "watched_stocks.csv")
 
-# 近30天的交易日期
+
+def add_to_watchlist_api():
+    try:
+        data = request.get_json()
+        code = data.get("code")
+        name = data.get("name", "未知名称")
+
+        if not code:
+            return jsonify({"code": 1, "message": "股票代码不能为空"}), 400
+
+        # 如果文件存在且非空才读取
+        if os.path.exists(WATCHLIST_FILE) and os.path.getsize(WATCHLIST_FILE) > 0:
+            df = pd.read_csv(WATCHLIST_FILE, dtype=str)
+        else:
+            df = pd.DataFrame(columns=["股票代码", "股票名称"])
+
+        # 检查是否已存在
+        if not df[df["股票代码"] == code].empty:
+            return jsonify({"code": 0, "message": f"{code} 已在关注列表中"})
+
+        # 添加
+        new_row = pd.DataFrame([[code, name]], columns=["股票代码", "股票名称"])
+        df = pd.concat([df, new_row], ignore_index=True)
+        df.to_csv(WATCHLIST_FILE, index=False, encoding="utf-8-sig")
+
+        return jsonify({"code": 0, "message": f"已添加 {code} 到关注列表"})
+    except Exception as e:
+        return jsonify({"code": -1, "message": f"添加失败: {str(e)}"}), 500
+
+
+def remove_to_watchlist_api():
+    try:
+        data = request.get_json()
+        code = data.get("code")
+
+        if not code:
+            return jsonify({"code": 1, "message": "股票代码不能为空"}), 400
+
+        # 文件不存在或为空
+        if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
+            return jsonify({"code": 0, "message": "关注列表为空"})
+
+        df = pd.read_csv(WATCHLIST_FILE, dtype=str)
+        before_count = len(df)
+        df = df[df["股票代码"] != code]
+
+        if len(df) == before_count:
+            return jsonify({"code": 0, "message": f"{code} 不在关注列表中"})
+
+        df.to_csv(WATCHLIST_FILE, index=False, encoding="utf-8-sig")
+
+        return jsonify({"code": 0, "message": f"已移除 {code} 从关注列表"})
+    except Exception as e:
+        return jsonify({"code": -1, "message": f"移除失败: {str(e)}"}), 500
+
+
+def get_watched_stocks_api():
+    try:
+        df = pd.read_csv(WATCHLIST_FILE, dtype=str)
+        if "股票代码" in df.columns and "股票名称" in df.columns:
+            watched_list = (
+                df[["股票代码", "股票名称"]].drop_duplicates().to_dict(orient="records")
+            )
+            return jsonify({"code": 0, "data": watched_list, "message": "获取成功"})
+        else:
+            return []
+    except FileNotFoundError:
+        print("关注股票文件不存在")
+        return jsonify({"code": -1, "message": "关注股票文件不存在"})
+    except Exception as e:
+        print(f"读取关注股票文件出错: {e}")
+        return jsonify({"code": -1, "message": "读取关注股票文件出错"})
+
+
+df = ak.tool_trade_date_hist_sina()
+
+# 确保转换为 datetime
+df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+
+TRADE_DATES = df["trade_date"].dt.strftime("%Y%m%d").tolist()
+
+
 def get_recent_trade_dates(days=30):
-    """
-    获取最近days个自然日内的工作日（排除周末）
-    """
-    trade_dates = []
-    today = datetime.now()
-
-    for i in range(days * 2):  # 乘2避免因周末不足够天数
-        day = today - timedelta(days=i)
-        if day.weekday() < 5:  # 周一~周五为0~4
-            trade_dates.append(day.strftime("%Y%m%d"))
-            if len(trade_dates) >= days:
-                break
-
-    return sorted(trade_dates)
-
-
-# 上交所融资融券数据（SSE）
-def fetch_and_update_margin_data_sse(code: str, days=30):
-    """
-    拉取上交所单股融资融券数据，近N日，保存至 margin_sse.csv，自动去重。
-    """
-    dates = get_recent_trade_dates(days)
-    file_path = os.path.join(BASE_DIR, "stocks_info", "margin_sse.csv")
-
-    dfs = []
-    for date_str in dates:
-        try:
-            print(f"正在获取上交所{date_str}的融资融券数据中。。。")
-            df = ak.stock_margin_detail_sse(date=date_str)
-            stock_df = df[df["标的证券代码"] == code]
-            if not stock_df.empty:
-                stock_df = stock_df.copy()
-                stock_df["日期"] = date_str
-                dfs.append(stock_df)
-        except Exception as e:
-            print(f"[SSE] 日期 {date_str} 拉取失败: {e}")
-            continue
-
-    if not dfs:
-        print(f"[SSE] {code} 近{days}日无数据")
-        return []
-
-    new_data = pd.concat(dfs, ignore_index=True)
-
-    # 直接覆盖写入，不保留历史数据
-    new_data.to_csv(file_path, index=False, encoding="utf-8-sig")
-    print(f"[SSE] {code} 数据已保存至 {file_path}（已覆盖旧数据）")
-
-    return new_data.to_dict(orient="records")
-
-
-# 深交所融资融券数据（SZSE）
-def fetch_and_update_margin_data_szse(code: str, days=30):
-    """
-    拉取深交所单股融资融券数据，近N日，保存至 margin_szse.csv，自动去重。
-    """
-    dates = get_recent_trade_dates(days)
-    file_path = os.path.join(BASE_DIR, "stocks_info", "margin_szse.csv")
-
-    dfs = []
-    for date_str in dates:
-        try:
-            print(f"正在获取深交所{date_str}的融资融券数据中。。。")
-            df = ak.stock_margin_detail_szse(date=date_str)
-            stock_df = df[df["证券代码"] == code]
-            if not stock_df.empty:
-                stock_df = stock_df.copy()
-                stock_df["日期"] = date_str
-                dfs.append(stock_df)
-        except Exception as e:
-            print(f"[SZSE] 日期 {date_str} 拉取失败: {e}")
-            continue
-
-    if not dfs:
-        print(f"[SZSE] {code} 近{days}日无数据")
-        return []
-
-    new_data = pd.concat(dfs, ignore_index=True)
-
-    # 覆盖旧文件，直接写入
-    new_data.to_csv(file_path, index=False, encoding="utf-8-sig")
-    print(f"[SZSE] {code} 数据已保存至 {file_path}（已覆盖旧数据）")
-
-    return new_data.to_dict(orient="records")
+    today = datetime.now().strftime("%Y%m%d")
+    idx = next((i for i, d in enumerate(TRADE_DATES) if d > today), len(TRADE_DATES))
+    return TRADE_DATES[max(0, idx - days) : idx]
 
 
 def to_native_types(d):
@@ -172,33 +173,178 @@ def analyze_margin_data_sse(code: str):
     return to_native_types(analysis)
 
 
-# 获取股票代码的融资融券数据
-def fetch_and_update_margin_by_code_api():
+def update_market_file(
+    market: str, file_path: str, date_col: str, ak_fetch_func, dates
+):
+    """
+    更新某个市场的融资融券数据（全量模式，不按 code 过滤）。
+    market: "SSE" or "SZSE"
+    file_path: CSV 文件路径
+    date_col: 日期列名 (SSE="信用交易日期", SZSE="日期")
+    ak_fetch_func: akshare 数据获取函数
+    dates: 要更新的交易日列表
+    """
+    # 读取已有文件
+    if os.path.exists(file_path):
+        existing_df = pd.read_csv(file_path, encoding="utf-8-sig", dtype=str)
+    else:
+        existing_df = pd.DataFrame()
+
+    existing_dates = (
+        set(existing_df[date_col].astype(str).unique())
+        if not existing_df.empty
+        else set()
+    )
+
+    added_rows = 0
+    skipped_dates = []
+    updated_dates = []
+    new_dfs = []
+
+    for date_str in dates:
+        if date_str in existing_dates:
+            print(f"[{market}] {date_str} 已存在，跳过")
+            skipped_dates.append(date_str)
+            continue
+
+        try:
+            print(f"[{market}] 获取 {date_str} 数据中...")
+            df = ak_fetch_func(date=date_str)
+            if not df.empty:
+                df[date_col] = date_str
+                new_dfs.append(df)
+                updated_dates.append(date_str)
+        except Exception as e:
+            print(f"[{market}] {date_str} 拉取失败: {e}")
+
+    if new_dfs:
+        new_data = pd.concat(new_dfs, ignore_index=True)
+        final_df = (
+            pd.concat([existing_df, new_data], ignore_index=True)
+            if not existing_df.empty
+            else new_data
+        )
+        final_df.to_csv(file_path, index=False, encoding="utf-8-sig")
+        added_rows = len(new_data)
+        print(f"[{market}] 已更新 {added_rows} 行数据")
+    else:
+        print(f"[{market}] 无需更新")
+
+    return {
+        "added_rows": added_rows,
+        "updated_dates": updated_dates,
+        "skipped_dates": skipped_dates,
+    }
+
+
+def update_margin_data_api():
+    """
+    POST JSON:
+    {
+        "days": 30  # 最近 N 个交易日（必填）
+    }
+    """
+    data = request.get_json(silent=True) or {}
     try:
-        data = request.get_json()
-        code = data.get("code")
         days = int(data.get("days", 30))
+        if days <= 0:
+            raise ValueError
+    except Exception:
+        return jsonify({"code": 1, "message": "参数 days 错误，应为正整数"}), 400
 
-        if not code:
-            return jsonify({"code": 1, "message": "缺少参数：code"}), 400
+    try:
+        dates = get_recent_trade_dates(days)  # 升序交易日列表
+    except Exception as e:
+        return jsonify({"code": 1, "message": f"获取交易日失败: {e}"}), 500
 
-        if code.startswith("6"):  # 上交所
-            records = fetch_and_update_margin_data_sse(code, days)
-        elif code.startswith(("0", "3")):  # 深交所
-            records = fetch_and_update_margin_data_szse(code, days)
-        else:
-            return jsonify({"code": 2, "message": f"不支持的股票代码格式：{code}"}), 400
+    sse_result = update_market_file(
+        "SSE", MARGIN_FILE_SSE, "信用交易日期", ak.stock_margin_detail_sse, dates
+    )
+    szse_result = update_market_file(
+        "SZSE", MARGIN_FILE_SZSE, "日期", ak.stock_margin_detail_szse, dates
+    )
 
-        return jsonify(
+    return (
+        jsonify(
             {
                 "code": 0,
-                "message": f"{code} 融资融券数据更新成功，共获取 {len(records)} 条记录",
-                "data": records,
+                "message": "更新完成",
+                "data": {"SSE": sse_result, "SZSE": szse_result},
             }
+        ),
+        200,
+    )
+
+
+def query_margin_data_by_code_api():
+    """
+    查询单只股票的融资融券数据（从本地文件中读取）。
+    优先从上交所文件查找，再查深交所文件，合并结果返回。
+    日期字段统一为 date，按日期升序排序。
+    """
+    data = request.get_json()
+    code = data.get("code", "").strip()
+
+    if not code:
+        return jsonify({"code": 1, "message": "缺少股票代码参数", "data": []}), 400
+
+    result = []
+
+    # 查 SSE
+    if os.path.exists(MARGIN_FILE_SSE):
+        try:
+            df_sse = pd.read_csv(MARGIN_FILE_SSE, encoding="utf-8-sig")
+            if "标的证券代码" in df_sse.columns:
+                # 确保code是字符串且去空格
+                code = str(code).strip().zfill(6)
+                codes_series = (
+                    df_sse["标的证券代码"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.zfill(6)
+                )
+                filtered = df_sse[codes_series == code]
+                if not filtered.empty:
+                    # 统一日期字段
+                    filtered.rename(columns={"信用交易日期": "date"}, inplace=True)
+                    filtered.sort_values("date", inplace=True)
+                    result.append(
+                        {"exchange": "SSE", "data": filtered.to_dict(orient="records")}
+                    )
+        except Exception as e:
+            print(f"[query_margin_data] 读取 SSE 文件异常: {e}")
+
+    # 查 SZSE
+    if os.path.exists(MARGIN_FILE_SZSE):
+        try:
+            df_szse = pd.read_csv(MARGIN_FILE_SZSE, encoding="utf-8-sig")
+            if "证券代码" in df_szse.columns:
+                # 确保code是字符串且去空格
+                code = str(code).strip().zfill(6)
+
+                # 处理证券代码列：填充缺失，转字符串，去空格，补齐6位
+                codes_series = (
+                    df_szse["证券代码"].fillna("").astype(str).str.strip().str.zfill(6)
+                )
+
+                # 过滤匹配行
+                filtered = df_szse[codes_series == code]
+                if not filtered.empty:
+                    filtered.rename(columns={"日期": "date"}, inplace=True)
+                    filtered.sort_values("date", inplace=True)
+                    result.append(
+                        {"exchange": "SZSE", "data": filtered.to_dict(orient="records")}
+                    )
+        except Exception as e:
+            print(f"[query_margin_data] 读取 SZSE 文件异常: {e}")
+
+    if not result:
+        return jsonify(
+            {"code": 1, "message": f"股票代码 {code} 未查询到融资融券数据", "data": []}
         )
 
-    except Exception as e:
-        return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
+    return jsonify({"code": 0, "message": "查询成功", "data": result})
 
 
 def get_history_cache_count_api():
@@ -394,3 +540,7 @@ def list_low_price_stock_files_api():
         )
     except Exception as e:
         return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
+
+
+if __name__ == "__main__":
+    print(f"开始访问：{get_recent_trade_dates()}")
