@@ -2,3 +2,5 @@
 .vscode
 history_cache
 stocks_info
+**/__pycache__/
+__pycache__

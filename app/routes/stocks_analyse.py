@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 import akshare as ak
 import numpy as np
+from pandas.errors import EmptyDataError
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 HISTORY_CACHE_DIR = os.path.join(BASE_DIR, "history_cache")
@@ -389,15 +390,21 @@ def analyze_batch_api():
             file = files[idx]
             code = file.replace(".csv", "")
             path = os.path.join(HISTORY_CACHE_DIR, file)
+            # 简单进度日志
+            print(
+                f"[{idx - start_index + 1}/{end_index - start_index}] 正在处理 {code} ...",
+                flush=True,
+            )
 
             try:
-                df = pd.read_csv(path)
+                try:
+                    df = pd.read_csv(path)
+                    if df.empty:
+                        continue  # 有表头但无数据
+                except EmptyDataError:
+                    continue  # 文件完全空
                 df["日期"] = pd.to_datetime(df["日期"])
                 df = df[df["日期"] >= cutoff_date]
-
-                if df.empty:
-                    continue
-
                 min_price = df["最低"].astype(float).min()
                 max_price = df["最高"].astype(float).max()
                 current_price = float(df.iloc[-1]["收盘"])
