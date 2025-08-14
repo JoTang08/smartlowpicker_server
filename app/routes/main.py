@@ -7,6 +7,7 @@ from app.routes.stocks_info import (
     async_all_stock_start_api,
     all_stock_async_stop_api,
     check_async_all_status_api,
+    get_margin_stocks_api,
 )
 
 from app.routes.stocks_analyse import (
@@ -21,6 +22,9 @@ from app.routes.stocks_analyse import (
     get_watched_stocks_api,
     query_margin_data_by_code_api,
 )
+
+from app.routes.boards_info import get_boards_api, get_board_members_api
+
 
 main = Blueprint("main", __name__)
 
@@ -38,6 +42,11 @@ def stocks_count_handler():
 @main.route("/stocks/list", methods=["GET"])
 def stocks_list_handler():
     return stock_list_api()
+
+
+@main.route("/get_margin_stocks", methods=["POST"])
+def get_margin_stocks():
+    return get_margin_stocks_api()
 
 
 # @code: 代码
@@ -112,3 +121,17 @@ def get_watched_stocks():
 @main.route("/query_margin_data_by_code", methods=["POST"])
 def query_margin_data_by_code():
     return query_margin_data_by_code_api()
+
+
+# 板块信息 start
+@main.route("/boards", methods=["GET"])
+def get_boards():
+    return get_boards_api()
+
+
+@main.route("/get_board_members", methods=["POST"])
+def get_board_members():
+    return get_board_members_api()
+
+
+# 板块信息 end
