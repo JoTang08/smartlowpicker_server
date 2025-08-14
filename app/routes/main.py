@@ -21,6 +21,7 @@ from app.routes.stocks_analyse import (
     remove_to_watchlist_api,
     get_watched_stocks_api,
     query_margin_data_by_code_api,
+    query_latest_main_stock_holder_api,
 )
 
 from app.routes.boards_info import get_boards_api, get_board_members_api
@@ -121,6 +122,11 @@ def get_watched_stocks():
 @main.route("/query_margin_data_by_code", methods=["POST"])
 def query_margin_data_by_code():
     return query_margin_data_by_code_api()
+
+
+@main.route("/query_latest_main_stock_holder", methods=["POST"])
+def query_latest_main_stock_holder():
+    return query_latest_main_stock_holder_api()
 
 
 # 板块信息 start

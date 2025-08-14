@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 import akshare as ak
 import numpy as np
 from pandas.errors import EmptyDataError
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 HISTORY_CACHE_DIR = os.path.join(BASE_DIR, "history_cache")
@@ -346,6 +350,62 @@ def query_margin_data_by_code_api():
         )
 
     return jsonify({"code": 0, "message": "查询成功", "data": result})
+
+
+def query_latest_main_stock_holder_api():
+    """
+    查询单只股票最新公告的主要股东信息
+    """
+    data = request.get_json()
+    code = data.get("code", "").strip()
+
+    if not code:
+        return jsonify({"code": 1, "message": "缺少股票代码参数", "data": []}), 400
+
+    try:
+        # 确保 code 是 6 位字符串
+        code = str(code).zfill(6)
+
+        # 获取股东信息
+        df = ak.stock_main_stock_holder(stock=code)
+
+        if df.empty:
+            return jsonify(
+                {
+                    "code": 1,
+                    "message": f"股票代码 {code} 未查询到主要股东信息",
+                    "data": [],
+                }
+            )
+
+        # 转换公告日期为 datetime，剔除异常
+        df["公告日期"] = pd.to_datetime(df["公告日期"], errors="coerce")
+        df = df.dropna(subset=["公告日期"])
+        df = df.loc[df.groupby("编号")["截至日期"].idxmax()]
+
+        if df.empty:
+            return jsonify(
+                {"code": 1, "message": "股东数据中无有效公告日期", "data": []}
+            )
+
+        # 找到最新公告日期
+        latest_date = df["公告日期"].max()
+
+        # 筛选所有该日期的股东记录
+        latest_df = df[df["公告日期"] == latest_date]
+
+        # 统一 datetime 或 NaT 转字符串
+        for col in latest_df.columns:
+            if pd.api.types.is_datetime64_any_dtype(latest_df[col]):
+                latest_df[col] = latest_df[col].dt.strftime("%Y-%m-%d").fillna("")
+            else:
+                latest_df[col] = latest_df[col].apply(lambda x: "" if pd.isna(x) else x)
+
+        data_list = latest_df.to_dict(orient="records")
+        return jsonify({"code": 0, "message": "查询成功", "data": data_list})
+
+    except Exception as e:
+        return jsonify({"code": 1, "message": f"查询异常: {e}", "data": []})
 
 
 def get_history_cache_count_api():
