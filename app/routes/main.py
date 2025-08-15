@@ -7,7 +7,6 @@ from app.routes.stocks_info import (
     async_all_stock_start_api,
     all_stock_async_stop_api,
     check_async_all_status_api,
-    get_margin_stocks_api,
 )
 
 from app.routes.stocks_analyse import (
@@ -22,6 +21,7 @@ from app.routes.stocks_analyse import (
     get_watched_stocks_api,
     query_margin_data_by_code_api,
     query_latest_main_stock_holder_api,
+    get_margin_stocks_api,
 )
 
 from app.routes.boards_info import get_boards_api, get_board_members_api

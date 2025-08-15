@@ -609,5 +609,43 @@ def list_low_price_stock_files_api():
         return jsonify({"code": -1, "message": f"接口异常：{str(e)}"}), 500
 
 
-if __name__ == "__main__":
-    print(f"开始访问：{get_recent_trade_dates()}")
+def get_margin_stocks_api():
+    """
+    获取标的证券简称中包含指定关键词（默认 'ETF'）的股票信息，并根据 '标的证券代码' 去重
+    """
+    # 获取前端传入的关键词（默认 'ETF'）
+    keyword = (
+        request.json.get("keyword") if request.is_json else request.form.get("keyword")
+    )
+
+    if not keyword:
+        return jsonify({"error": "缺少参数: keyword"}), 400
+
+    if not os.path.exists(MARGIN_FILE_SSE):
+        return jsonify({"error": "数据文件不存在"}), 404
+
+    try:
+        # 读取 CSV
+        df = pd.read_csv(MARGIN_FILE_SSE)
+
+        # 检查表头
+        if "标的证券简称" not in df.columns or "标的证券代码" not in df.columns:
+            return jsonify({"error": "CSV 文件缺少必要列"}), 400
+
+        # 筛选包含关键词的行
+        filtered_df = df[df["标的证券简称"].str.contains(keyword, na=False)]
+
+        # 根据 '标的证券代码' 去重，保留第一条
+        filtered_df = filtered_df.drop_duplicates(subset=["标的证券代码"], keep="first")
+
+        # 转成字典列表返回
+        data = filtered_df.to_dict(orient="records")
+
+        return jsonify({"code": 0, "count": len(data), "data": data})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# if __name__ == "__main__":
+#     print(f"开始访问：{get_recent_trade_dates()}")
